@@ -2,13 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>SPACE SHOOTER 3D — v1.0.0</title>
   <meta name="description" content="宇宙を舞台にした没入感のある3Dスペースシューティングゲーム" />
   <style>
     /*
-     * Version: 1.0.9
-     * Update: カウントダウンタイマーを完全削除
+     * Version: 1.1.0
+     * Update: スマホタッチ操作対応（バーチャルスティック + FIREボタン）
      * Date: 2026-04-05
      */
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
@@ -77,6 +77,79 @@
       color: rgba(255, 200, 50, 0.9);
       letter-spacing: 3px;
       text-shadow: 0 0 15px rgba(255, 200, 50, 0.6);
+    }
+
+    /* ===== MOBILE TOUCH CONTROLS (touch devices only) ===== */
+    @media (pointer: coarse) {
+      #touch-controls { display: flex; }
+    }
+
+    #touch-controls {
+      display: none;   /* hidden on desktop */
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 200px;
+      pointer-events: none;
+      z-index: 20;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 20px 30px;
+    }
+
+    /* ---- Joystick ---- */
+    #joystick-zone {
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: rgba(100, 200, 255, 0.08);
+      border: 2px solid rgba(100, 200, 255, 0.25);
+      position: relative;
+      pointer-events: all;
+      touch-action: none;
+      flex-shrink: 0;
+    }
+
+    #joystick-knob {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(100,200,255,0.7) 0%, rgba(0,100,200,0.4) 100%);
+      border: 2px solid rgba(100,200,255,0.6);
+      box-shadow: 0 0 16px rgba(100,200,255,0.5);
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      transition: transform 0.05s;
+      pointer-events: none;
+    }
+
+    /* ---- Fire button ---- */
+    #fire-btn {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,80,80,0.8) 0%, rgba(180,0,0,0.5) 100%);
+      border: 3px solid rgba(255,120,120,0.7);
+      box-shadow: 0 0 24px rgba(255,60,60,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 2px;
+      pointer-events: all;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      flex-shrink: 0;
+      transition: box-shadow 0.05s, transform 0.05s;
+    }
+
+    #fire-btn.active {
+      box-shadow: 0 0 40px rgba(255,60,60,1);
+      transform: scale(0.93);
     }
 
     #lives-panel {
@@ -395,6 +468,14 @@
 <!-- Damage overlay -->
 <div id="damage-overlay"></div>
 
+<!-- Mobile touch controls -->
+<div id="touch-controls">
+  <div id="joystick-zone">
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="fire-btn">FIRE</div>
+</div>
+
 <!-- HUD -->
 <div id="hud">
   <div id="lives-panel">
@@ -434,7 +515,7 @@
   <div class="title-logo">
     <div class="title-sub">DEEP SPACE COMBAT</div>
     <div class="title-main">NOVA STRIKE</div>
-    <div class="title-version">VERSION 1.0.9</div>
+    <div class="title-version">VERSION 1.1.0</div>
   </div>
   <div class="deco-line"></div>
   <div class="instructions">
@@ -462,8 +543,8 @@
 
 <script>
 /*
- * Version: 1.0.9
- * Update: カウントダウンタイマーを完全削除
+ * Version: 1.1.0
+ * Update: スマホタッチ操作対応（バーチャルスティック + FIREボタン）
  * Date: 2026-04-05
  */
 
@@ -1010,7 +1091,7 @@ const mouse = { x: 0, y: 0, pressed: false };
 let shootCooldown = 0;
 
 document.addEventListener('keydown', e => { keys[e.code] = true; });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('keyup',   e => { keys[e.code] = false; });
 
 document.addEventListener('mousemove', e => {
   mouse.x = (e.clientX / window.innerWidth - 0.5) * 2;
@@ -1018,7 +1099,7 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mousedown', () => { mouse.pressed = true; });
-document.addEventListener('mouseup', () => { mouse.pressed = false; });
+document.addEventListener('mouseup',   () => { mouse.pressed = false; });
 document.addEventListener('click', () => {
   if (State.isPlaying) tryShoot();
 });
@@ -1026,6 +1107,97 @@ document.addEventListener('click', () => {
 document.addEventListener('keydown', e => {
   if (e.code === 'Space' && State.isPlaying) tryShoot();
 });
+
+// ===== TOUCH CONTROLS (mobile) =====
+(function setupTouchControls() {
+  const zone  = document.getElementById('joystick-zone');
+  const knob  = document.getElementById('joystick-knob');
+  const fireBtn = document.getElementById('fire-btn');
+
+  if (!zone || !knob || !fireBtn) return;
+
+  const RADIUS = 38; // max knob offset in px
+  let joystickActive = false;
+  let joyOriginX = 0, joyOriginY = 0;
+  let joyTouchId = null;
+
+  function applyJoy(dx, dy) {
+    const len = Math.sqrt(dx*dx + dy*dy);
+    const norm = len > RADIUS ? RADIUS / len : 1;
+    const nx = dx * norm;
+    const ny = dy * norm;
+
+    // Move knob visually
+    knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+
+    // Threshold: 30% of RADIUS before registering direction
+    const thresh = RADIUS * 0.3;
+    keys['ArrowLeft']  = nx < -thresh;
+    keys['ArrowRight'] = nx >  thresh;
+    keys['ArrowUp']    = ny < -thresh;
+    keys['ArrowDown']  = ny >  thresh;
+  }
+
+  function resetJoy() {
+    knob.style.transform = 'translate(-50%, -50%)';
+    keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = keys['ArrowDown'] = false;
+    joystickActive = false;
+    joyTouchId = null;
+  }
+
+  zone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    joyTouchId = t.identifier;
+    const rect = zone.getBoundingClientRect();
+    joyOriginX = rect.left + rect.width  / 2;
+    joyOriginY = rect.top  + rect.height / 2;
+    joystickActive = true;
+    applyJoy(t.clientX - joyOriginX, t.clientY - joyOriginY);
+  }, { passive: false });
+
+  zone.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) {
+        applyJoy(t.clientX - joyOriginX, t.clientY - joyOriginY);
+      }
+    }
+  }, { passive: false });
+
+  zone.addEventListener('touchend', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) resetJoy();
+    }
+  }, { passive: false });
+
+  zone.addEventListener('touchcancel', () => resetJoy());
+
+  // Fire button
+  fireBtn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    fireBtn.classList.add('active');
+    mouse.pressed = true;
+    if (State.isPlaying) tryShoot();
+  }, { passive: false });
+
+  fireBtn.addEventListener('touchend', e => {
+    e.preventDefault();
+    fireBtn.classList.remove('active');
+    mouse.pressed = false;
+  }, { passive: false });
+
+  fireBtn.addEventListener('touchcancel', () => {
+    fireBtn.classList.remove('active');
+    mouse.pressed = false;
+  });
+
+  // Prevent page scroll during gameplay touch
+  document.addEventListener('touchmove', e => {
+    if (State.isPlaying) e.preventDefault();
+  }, { passive: false });
+})();
 
 function tryShoot() {
   if (shootCooldown > 0) return;
