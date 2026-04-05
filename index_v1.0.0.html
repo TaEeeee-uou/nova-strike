@@ -7,8 +7,8 @@
   <meta name="description" content="宇宙を舞台にした没入感のある3Dスペースシューティングゲーム" />
   <style>
     /*
-     * Version: 1.1.0
-     * Update: スマホタッチ操作対応（バーチャルスティック + FIREボタン）
+     * Version: 1.1.1
+     * Update: 敵耐久値変更（1/5/8発）、被弾フラッシュ・エミッシブヒットフィードバック追加
      * Date: 2026-04-05
      */
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
@@ -515,7 +515,7 @@
   <div class="title-logo">
     <div class="title-sub">DEEP SPACE COMBAT</div>
     <div class="title-main">NOVA STRIKE</div>
-    <div class="title-version">VERSION 1.1.0</div>
+    <div class="title-version">VERSION 1.1.1</div>
   </div>
   <div class="deco-line"></div>
   <div class="instructions">
@@ -543,8 +543,8 @@
 
 <script>
 /*
- * Version: 1.1.0
- * Update: スマホタッチ操作対応（バーチャルスティック + FIREボタン）
+ * Version: 1.1.1
+ * Update: 敵耐久値変更（1/5/8発）、被弾フラッシュ・エミッシブヒットフィードバック追加
  * Date: 2026-04-05
  */
 
@@ -982,14 +982,19 @@ function createEnemy(type = 0) {
   );
 
   const speed = 0.08 + Math.random() * 0.06 + State.level * 0.01;
-  const health = type === 2 ? 3 : (type === 1 ? 2 : 1);
+  // HP: Type0=1発(雑魚), Type1=5発(中ボス), Type2=8発(タンク)
+  const maxHealth = type === 2 ? 8 : (type === 1 ? 5 : 1);
+  const health = maxHealth;
 
   return {
     group,
     mesh,
+    mat,   // keep ref for hit flash
     speed,
     health,
+    maxHealth,
     type,
+    flashTimer: 0,
     rotSpeed: new THREE.Vector3(
       (Math.random() - 0.5) * 0.04,
       (Math.random() - 0.5) * 0.04,
@@ -1440,12 +1445,25 @@ function animate() {
       const e = enemies[i];
       if (distance3D(b.group, e.group) < 0.6) {
         e.health--;
-        createExplosion(b.group.position.clone(), enemyColors[e.type], 15);
         b.active = false;
         b.group.visible = false;
 
+        // ---- Hit effects ----
+        // 1. Small spark at impact point
+        createExplosion(b.group.position.clone(), enemyColors[e.type], 12);
+
+        // 2. White flash on enemy mesh
+        if (e.mat) {
+          e.mat.emissive.set(0xffffff);
+          e.flashTimer = 6; // frames to hold flash
+        }
+
+        // 3. Emissive ramp: glow brighter as health drops (for multi-hit enemies)
+        // (handled in animate loop via flashTimer)
+
         if (e.health <= 0) {
-          createExplosion(e.group.position.clone(), enemyColors[e.type], 50);
+          // DESTROYED
+          createExplosion(e.group.position.clone(), enemyColors[e.type], 60);
           scene.remove(e.group);
           enemies.splice(i, 1);
           State.killCount++;
@@ -1454,7 +1472,9 @@ function animate() {
           comboDisplay.style.opacity = '1';
           State.comboTimer = 120;
 
-          const pts = (e.type + 1) * 100;
+          // Scores: Type0=100, Type1=300, Type2=600
+          const basePts = type === 2 ? 600 : (e.type === 1 ? 300 : 100);
+          const pts = basePts;
           addScore(pts);
           checkLevelUp();
 
@@ -1496,6 +1516,19 @@ function animate() {
     e.mesh.rotation.x += e.rotSpeed.x;
     e.mesh.rotation.y += e.rotSpeed.y;
     e.mesh.rotation.z += e.rotSpeed.z;
+
+    // Hit flash + emissive health feedback
+    if (e.mat) {
+      if (e.flashTimer > 0) {
+        e.flashTimer--;
+        if (e.flashTimer <= 0) {
+          // Flash done → set emissive based on damage (more damage = more glow)
+          const dmgRatio = 1 - (e.health / e.maxHealth); // 0=full HP, 1=almost dead
+          const baseColor = new THREE.Color(enemyColors[e.type]);
+          e.mat.emissive.copy(baseColor).multiplyScalar(0.3 + dmgRatio * 1.2);
+        }
+      }
+    }
 
     // Track player slightly
     const dx = playerShip.position.x - e.group.position.x;
