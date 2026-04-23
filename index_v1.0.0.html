@@ -1193,14 +1193,9 @@ document.addEventListener('keydown', e => {
     const nx = dx * norm;
     const ny = dy * norm;
 
-    // Position knob relative to zone center
-    const rect = zone.getBoundingClientRect();
-    const zoneHalf = rect.width / 2;
-    const offsetX = (joyOriginX - (rect.left + zoneHalf)) + nx;
-    const offsetY = (joyOriginY - (rect.top  + zoneHalf)) + ny;
-    knob.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+    // Knob stays within zone (always relative to zone center)
+    knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
 
-    // Threshold: 25% of RADIUS before registering direction
     const thresh = RADIUS * 0.25;
     keys['ArrowLeft']  = nx < -thresh;
     keys['ArrowRight'] = nx >  thresh;
