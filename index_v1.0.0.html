@@ -1175,8 +1175,15 @@ document.addEventListener('keydown', e => {
 
   if (!zone || !knob || !fireBtn) return;
 
+  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  // Force show touch controls on touch devices (CSS media query may not fire on all browsers)
+  if (isTouchDevice) {
+    document.getElementById('touch-controls').style.display = 'flex';
+  }
+
   // Switch title screen instructions for touch devices
-  if (window.matchMedia('(pointer: coarse)').matches) {
+  if (isTouchDevice) {
     const kbInstr = document.getElementById('kb-instructions');
     const touchInstr = document.getElementById('touch-instructions');
     if (kbInstr) kbInstr.style.display = 'none';
