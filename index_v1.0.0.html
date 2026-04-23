@@ -82,24 +82,32 @@
     /* ===== MOBILE TOUCH CONTROLS (touch devices only) ===== */
     @media (pointer: coarse) {
       #touch-controls { display: flex; }
+
+      /* Push HUD elements above touch controls area */
+      #health-bar-container {
+        bottom: 230px;
+      }
+      #speed-indicator {
+        bottom: 230px;
+      }
     }
 
     #touch-controls {
       display: none;   /* hidden on desktop */
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      height: 200px;
+      height: 220px;
       pointer-events: none;
       z-index: 20;
       justify-content: space-between;
       align-items: flex-end;
-      padding: 20px 30px;
+      padding: 24px 30px;
     }
 
     /* ---- Joystick ---- */
     #joystick-zone {
-      width: 130px;
-      height: 130px;
+      width: 150px;
+      height: 150px;
       border-radius: 50%;
       background: rgba(100, 200, 255, 0.08);
       border: 2px solid rgba(100, 200, 255, 0.25);
@@ -110,8 +118,8 @@
     }
 
     #joystick-knob {
-      width: 54px;
-      height: 54px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(100,200,255,0.7) 0%, rgba(0,100,200,0.4) 100%);
       border: 2px solid rgba(100,200,255,0.6);
@@ -123,10 +131,47 @@
       pointer-events: none;
     }
 
+    /* ---- Right button group ---- */
+    #right-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    /* ---- Boost button ---- */
+    #boost-btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,200,50,0.7) 0%, rgba(180,120,0,0.4) 100%);
+      border: 2px solid rgba(255,200,50,0.6);
+      box-shadow: 0 0 16px rgba(255,180,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 1px;
+      pointer-events: all;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: box-shadow 0.05s, transform 0.05s;
+    }
+
+    #boost-btn.active {
+      box-shadow: 0 0 32px rgba(255,200,0,1);
+      transform: scale(0.93);
+    }
+
     /* ---- Fire button ---- */
     #fire-btn {
-      width: 100px;
-      height: 100px;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(255,80,80,0.8) 0%, rgba(180,0,0,0.5) 100%);
       border: 3px solid rgba(255,120,120,0.7);
@@ -473,7 +518,10 @@
   <div id="joystick-zone">
     <div id="joystick-knob"></div>
   </div>
-  <div id="fire-btn">FIRE</div>
+  <div id="right-controls">
+    <div id="boost-btn">BOOST</div>
+    <div id="fire-btn">FIRE</div>
+  </div>
 </div>
 
 <!-- HUD -->
@@ -518,11 +566,16 @@
     <div class="title-version">VERSION 1.1.2</div>
   </div>
   <div class="deco-line"></div>
-  <div class="instructions">
+  <div class="instructions" id="kb-instructions">
     <strong>WASD / ↑↓←→</strong> — 移動<br/>
     <strong>マウス移動</strong> — 照準<br/>
     <strong>クリック / スペース</strong> — 射撃<br/>
     <strong>SHIFT</strong> — ブースト
+  </div>
+  <div class="instructions" id="touch-instructions" style="display:none;">
+    <strong>左スティック</strong> — 移動<br/>
+    <strong>FIRE ボタン</strong> — 射撃（長押しで連射）<br/>
+    <strong>BOOST ボタン</strong> — ブースト
   </div>
   <div class="deco-line"></div>
   <button class="start-btn" id="start-btn">LAUNCH MISSION</button>
@@ -1115,16 +1168,24 @@ document.addEventListener('keydown', e => {
 
 // ===== TOUCH CONTROLS (mobile) =====
 (function setupTouchControls() {
-  const zone  = document.getElementById('joystick-zone');
-  const knob  = document.getElementById('joystick-knob');
+  const zone    = document.getElementById('joystick-zone');
+  const knob    = document.getElementById('joystick-knob');
   const fireBtn = document.getElementById('fire-btn');
+  const boostBtn = document.getElementById('boost-btn');
 
   if (!zone || !knob || !fireBtn) return;
 
-  const RADIUS = 38; // max knob offset in px
-  let joystickActive = false;
-  let joyOriginX = 0, joyOriginY = 0;
+  // Switch title screen instructions for touch devices
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    const kbInstr = document.getElementById('kb-instructions');
+    const touchInstr = document.getElementById('touch-instructions');
+    if (kbInstr) kbInstr.style.display = 'none';
+    if (touchInstr) touchInstr.style.display = 'block';
+  }
+
+  const RADIUS = 50; // max knob offset in px (larger for better control)
   let joyTouchId = null;
+  let joyOriginX = 0, joyOriginY = 0;
 
   function applyJoy(dx, dy) {
     const len = Math.sqrt(dx*dx + dy*dy);
@@ -1132,11 +1193,15 @@ document.addEventListener('keydown', e => {
     const nx = dx * norm;
     const ny = dy * norm;
 
-    // Move knob visually
-    knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+    // Position knob relative to zone center
+    const rect = zone.getBoundingClientRect();
+    const zoneHalf = rect.width / 2;
+    const offsetX = (joyOriginX - (rect.left + zoneHalf)) + nx;
+    const offsetY = (joyOriginY - (rect.top  + zoneHalf)) + ny;
+    knob.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
 
-    // Threshold: 30% of RADIUS before registering direction
-    const thresh = RADIUS * 0.3;
+    // Threshold: 25% of RADIUS before registering direction
+    const thresh = RADIUS * 0.25;
     keys['ArrowLeft']  = nx < -thresh;
     keys['ArrowRight'] = nx >  thresh;
     keys['ArrowUp']    = ny < -thresh;
@@ -1146,7 +1211,6 @@ document.addEventListener('keydown', e => {
   function resetJoy() {
     knob.style.transform = 'translate(-50%, -50%)';
     keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = keys['ArrowDown'] = false;
-    joystickActive = false;
     joyTouchId = null;
   }
 
@@ -1154,11 +1218,10 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     const t = e.changedTouches[0];
     joyTouchId = t.identifier;
-    const rect = zone.getBoundingClientRect();
-    joyOriginX = rect.left + rect.width  / 2;
-    joyOriginY = rect.top  + rect.height / 2;
-    joystickActive = true;
-    applyJoy(t.clientX - joyOriginX, t.clientY - joyOriginY);
+    // Use actual touch point as joystick origin (floating joystick)
+    joyOriginX = t.clientX;
+    joyOriginY = t.clientY;
+    applyJoy(0, 0);
   }, { passive: false });
 
   zone.addEventListener('touchmove', e => {
@@ -1179,7 +1242,7 @@ document.addEventListener('keydown', e => {
 
   zone.addEventListener('touchcancel', () => resetJoy());
 
-  // Fire button
+  // Fire button — single tap shoots, hold fires continuously via mouse.pressed
   fireBtn.addEventListener('touchstart', e => {
     e.preventDefault();
     fireBtn.classList.add('active');
@@ -1197,6 +1260,26 @@ document.addEventListener('keydown', e => {
     fireBtn.classList.remove('active');
     mouse.pressed = false;
   });
+
+  // Boost button — mirrors Shift key
+  if (boostBtn) {
+    boostBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      boostBtn.classList.add('active');
+      keys['ShiftLeft'] = true;
+    }, { passive: false });
+
+    boostBtn.addEventListener('touchend', e => {
+      e.preventDefault();
+      boostBtn.classList.remove('active');
+      keys['ShiftLeft'] = false;
+    }, { passive: false });
+
+    boostBtn.addEventListener('touchcancel', () => {
+      boostBtn.classList.remove('active');
+      keys['ShiftLeft'] = false;
+    });
+  }
 
   // Prevent page scroll during gameplay touch
   document.addEventListener('touchmove', e => {
