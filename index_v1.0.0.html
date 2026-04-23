@@ -141,7 +141,7 @@
     }
 
     /* ---- Boost button ---- */
-    #boost-btn {
+    #bomb-btn {
       width: 72px;
       height: 72px;
       border-radius: 50%;
@@ -163,7 +163,7 @@
       transition: box-shadow 0.05s, transform 0.05s;
     }
 
-    #boost-btn.active {
+    #bomb-btn.active {
       box-shadow: 0 0 32px rgba(255,200,0,1);
       transform: scale(0.93);
     }
@@ -519,7 +519,7 @@
     <div id="joystick-knob"></div>
   </div>
   <div id="right-controls">
-    <div id="boost-btn">BOOST</div>
+    <div id="bomb-btn">BOMB</div>
     <div id="fire-btn">FIRE</div>
   </div>
 </div>
@@ -573,9 +573,9 @@
     <strong>SHIFT</strong> — ブースト
   </div>
   <div class="instructions" id="touch-instructions" style="display:none;">
-    <strong>左スティック</strong> — 移動<br/>
-    <strong>FIRE ボタン</strong> — 射撃（長押しで連射）<br/>
-    <strong>BOOST ボタン</strong> — ブースト
+    <strong>左スティック</strong> — 移動（自動発射）<br/>
+    <strong>FIRE ボタン</strong> — 高速連射<br/>
+    <strong>BOMB ボタン</strong> — 全敵を一掃（10秒クールダウン）
   </div>
   <div class="deco-line"></div>
   <button class="start-btn" id="start-btn">LAUNCH MISSION</button>
@@ -1147,6 +1147,8 @@ function createExplosion(position, color = 0xff6600, count = 30) {
 const keys = {};
 const mouse = { x: 0, y: 0, pressed: false };
 let shootCooldown = 0;
+let autoFire = false;
+let bombCooldown = 0;
 
 document.addEventListener('keydown', e => { keys[e.code] = true; });
 document.addEventListener('keyup',   e => { keys[e.code] = false; });
@@ -1171,7 +1173,7 @@ document.addEventListener('keydown', e => {
   const zone    = document.getElementById('joystick-zone');
   const knob    = document.getElementById('joystick-knob');
   const fireBtn = document.getElementById('fire-btn');
-  const boostBtn = document.getElementById('boost-btn');
+  const boostBtn = document.getElementById('bomb-btn');
 
   if (!zone || !knob || !fireBtn) return;
 
@@ -1180,6 +1182,7 @@ document.addEventListener('keydown', e => {
   // Force show touch controls on touch devices (CSS media query may not fire on all browsers)
   if (isTouchDevice) {
     document.getElementById('touch-controls').style.display = 'flex';
+    autoFire = true;
   }
 
   // Switch title screen instructions for touch devices
@@ -1263,24 +1266,12 @@ document.addEventListener('keydown', e => {
     mouse.pressed = false;
   });
 
-  // Boost button — mirrors Shift key
+  // BOMB button — clears all enemies, 10-second cooldown
   if (boostBtn) {
     boostBtn.addEventListener('touchstart', e => {
       e.preventDefault();
-      boostBtn.classList.add('active');
-      keys['ShiftLeft'] = true;
+      deployBomb();
     }, { passive: false });
-
-    boostBtn.addEventListener('touchend', e => {
-      e.preventDefault();
-      boostBtn.classList.remove('active');
-      keys['ShiftLeft'] = false;
-    }, { passive: false });
-
-    boostBtn.addEventListener('touchcancel', () => {
-      boostBtn.classList.remove('active');
-      keys['ShiftLeft'] = false;
-    });
   }
 
   // Prevent page scroll during gameplay touch
@@ -1288,6 +1279,31 @@ document.addEventListener('keydown', e => {
     if (State.isPlaying) e.preventDefault();
   }, { passive: false });
 })();
+
+function deployBomb() {
+  if (bombCooldown > 0 || !State.isPlaying) return;
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    createExplosion(e.group.position.clone(), enemyColors[e.type], 30);
+    State.score += 200;
+    State.combo++;
+    scene.remove(e.group);
+  }
+  enemies.length = 0;
+
+  scoreEl.textContent = String(State.score).padStart(6, '0');
+
+  // Screen flash
+  damageOverlay.style.background = 'radial-gradient(ellipse at center, rgba(100,200,255,0.7) 0%, rgba(0,50,150,0.3) 100%)';
+  damageOverlay.style.opacity = 1;
+  setTimeout(() => {
+    damageOverlay.style.opacity = 0;
+    damageOverlay.style.background = 'radial-gradient(ellipse at center, transparent 40%, rgba(255, 30, 30, 0.5) 100%)';
+  }, 300);
+
+  bombCooldown = 600; // 10 seconds at 60fps
+}
 
 function tryShoot() {
   if (shootCooldown > 0) return;
@@ -1503,8 +1519,8 @@ function animate() {
   playerShip.rotation.z = THREE.MathUtils.lerp(playerShip.rotation.z, -dx * 8, 0.15);
   playerShip.rotation.x = THREE.MathUtils.lerp(playerShip.rotation.x, -dy * 3, 0.1);
 
-  // Mouse shoot hold
-  if (mouse.pressed && State.isPlaying) {
+  // Auto-fire on touch devices; mouse hold on desktop
+  if ((autoFire || mouse.pressed) && State.isPlaying) {
     if (shootCooldown <= 0) tryShoot();
   }
 
@@ -1513,6 +1529,21 @@ function animate() {
 
   // ===== SHOOT COOLDOWN =====
   if (shootCooldown > 0) shootCooldown--;
+
+  // ===== BOMB COOLDOWN =====
+  if (bombCooldown > 0) {
+    bombCooldown--;
+    const btn = document.getElementById('bomb-btn');
+    if (btn) {
+      if (bombCooldown > 0) {
+        btn.textContent = Math.ceil(bombCooldown / 60) + 's';
+        btn.style.opacity = '0.45';
+      } else {
+        btn.textContent = 'BOMB';
+        btn.style.opacity = '1';
+      }
+    }
+  }
 
   // ===== BULLETS =====
   for (const b of bulletPool) {
