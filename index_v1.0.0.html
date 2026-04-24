@@ -1508,9 +1508,13 @@ function animate() {
   if (keys['KeyW'] || keys['ArrowUp']) dy += speed;
   if (keys['KeyS'] || keys['ArrowDown']) dy -= speed;
 
-  // Apply keyboard movement
-  playerShip.position.x = THREE.MathUtils.clamp(playerShip.position.x + dx, -8, 8);
-  playerShip.position.y = THREE.MathUtils.clamp(playerShip.position.y + dy, -5, 5);
+  // Clamp within visible frustum bounds (accounts for mobile portrait vs desktop landscape)
+  const camDist = camera.position.z - playerShip.position.z;
+  const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camDist;
+  const halfW = halfH * camera.aspect;
+  const margin = 0.8;
+  playerShip.position.x = THREE.MathUtils.clamp(playerShip.position.x + dx, -(halfW - margin), halfW - margin);
+  playerShip.position.y = THREE.MathUtils.clamp(playerShip.position.y + dy, -(halfH - margin), halfH - margin);
 
   // Mouse aiming: the crosshair shows aim direction, ship does NOT drift toward mouse.
   // (Previously `dx += mouse.x * 0.015` caused constant rightward drift — now removed.)
